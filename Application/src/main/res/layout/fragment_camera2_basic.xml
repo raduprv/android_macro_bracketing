@@ -32,6 +32,35 @@
         android:layout_below="@id/texture"
         android:background="#4285f4">
 
+        <TextView
+            android:id="@+id/focusLabel"
+            android:text="Focus"
+            android:textColor="#FFFF00"
+            android:textSize="20sp"
+            android:layout_alignParentLeft="true"
+            android:layout_marginBottom="60dp"
+            android:layout_above="@+id/exposureLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:id="@+id/focusVal"
+            android:text="0"
+            android:textColor="#FFFF00"
+            android:textSize="16sp"
+            android:layout_toRightOf="@+id/focusLabel"
+            android:layout_above="@+id/focusLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <SeekBar
+            android:id="@+id/focus_seekbar"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_toRightOf="@+id/focusLabel"
+            android:layout_alignTop="@+id/focusLabel"
+            android:minHeight="2dip"
+            android:maxHeight="2dip"
+            android:max="100"/>
+
         <Button
             android:id="@+id/picture"
             android:layout_width="wrap_content"

@@ -17,22 +17,139 @@
 package com.example.android.camera2raw;
 
 import android.app.Activity;
+import android.content.res.AssetManager;
 import android.os.Bundle;
+import android.app.AlarmManager;
+import android.content.Intent;
+import android.app.PendingIntent;
+import android.os.Environment;
+import android.os.Handler;
+import android.provider.Settings;
+import android.content.Context;
+import android.util.Log;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 /**
  * Activity displaying a fragment that implements RAW photo captures.
  */
 public class CameraActivity extends Activity {
 
+    private static final String TAG = "Something";
+
+    public static Camera2RawFragment cameraraw = Camera2RawFragment.newInstance();
+    //String path = Environment.getDataDirectory()+"/android-Camera2Raw/";
+
+    private void copy_assets(Context context) {
+        AssetManager assetManager = context.getAssets();
+
+        String path = getApplicationContext().getApplicationInfo().dataDir+"/files";
+        Log.e(TAG, "Output path is"+path);
+
+        new File(path).mkdirs();
+
+        try {
+            InputStream in = assetManager.open("index.html");
+            OutputStream out = new FileOutputStream(path+"/index.html");
+
+            Log.e(TAG, "Output path is"+path);
+
+            byte[] buffer = new byte[1024];
+            int read = in.read(buffer);
+            while (read != -1) {
+                out.write(buffer, 0, read);
+                read = in.read(buffer);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error: "+ e.getMessage());
+        }
+    }
+
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState)
+    {
+        int i;
+
+        cameraraw.forced_focus_mm=90;
+        //cameraraw.init_webserver();
+
+        Context context = getApplicationContext();
+        cameraraw.propagate_context(context);
+
+        Log.e(TAG, "Trying to get assets");
+        copy_assets(context);
+
+        new Thread(new Runnable() {
+            public void run() {
+                cameraraw.init_webserver(cameraraw);            }
+        }).start();
+
+        new Thread(new Runnable() {
+            public void run() { cameraraw.que_thread(cameraraw);            }
+        }).start();
+
+        new Thread(new Runnable() {
+            public void run() { cameraraw.ftp_upload();            }
+        }).start();
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera);
-        if (null == savedInstanceState) {
-            getFragmentManager().beginTransaction()
-                    .replace(R.id.container, Camera2RawFragment.newInstance())
-                    .commit();
+
+        /*
+        if(Settings.System.canWrite(this)){
+            // change setting here
         }
+        else{
+            //Migrate to Setting write permission screen.
+            Intent intent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS);
+            intent.setData(Uri.parse("package:" + mContext.getPackageName()));
+            startActivity(intent);
+        }
+*/
+        //Settings.System.putInt(getContentResolver(),Settings.System.SCREEN_OFF_TIMEOUT, 10000);
+
+        /*
+        Intent intent = new Intent(this, MyBroadcastReceiver.class);
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(this.getApplicationContext(), 234324243, intent, 0);
+        AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+        alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + (2 * 1000), pendingIntent);
+*/
+
+
+        if (null == savedInstanceState) {
+            //getFragmentManager().beginTransaction().replace(R.id.container, Camera2RawFragment.newInstance()).commit();
+            getFragmentManager().beginTransaction().replace(R.id.container, cameraraw).commit();
+        }
+
+
+        cameraraw.forced_exposure=300_000_000L;
+        cameraraw.forced_iso=80;
+        cameraraw.force_exposure=true;
+/*
+        final Handler handler = new Handler();
+
+        for(i=0;i<0;i++) {
+
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    //Do something after 1000ms
+                    cameraraw.takePicture();
+                    cameraraw.forced_focus_mm+=cameraraw.forced_focus_mm/8;
+                }
+            }, 1000+i*5000);
+
+
+            //CameraActivity.cameraraw.takePicture();
+            //cameraraw.takePicture();
+        }
+*/
+        //cameraraw.takePicture();
+
+
     }
 
 }

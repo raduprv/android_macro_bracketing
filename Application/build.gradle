@@ -6,7 +6,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:3.0.1'
+        classpath 'com.android.tools.build:gradle:3.6.1'
     }
 }
 
@@ -35,7 +35,6 @@ List<String> dirs = [
 android {
     compileSdkVersion 27
 
-    buildToolsVersion "27.0.2"
 
     defaultConfig {
         minSdkVersion 21
@@ -58,5 +57,11 @@ android {
         androidTest.java.srcDirs = ['tests/src']
 
     }
+    externalNativeBuild {
+        cmake {
+            path file('../CMakeLists.txt')
+        }
+    }
+    ndkVersion = '20.1.5948944'
 
 }
