@@ -14,67 +14,147 @@
  limitations under the License.
 -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:id="@+id/myRelativeLayout"
+    tools:visibility="visible">
 
     <com.example.android.camera2raw.AutoFitTextureView
         android:id="@+id/texture"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentStart="true"
-        android:layout_alignParentTop="true" />
+        android:layout_alignParentTop="true"
+        android:layout_marginStart="0dp"
+        android:layout_marginTop="0dp" />
+
+    <TextView
+        android:id="@+id/focusLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="Focus near (mm)"
+        android:textColor="#FFFF00"
+        android:textSize="20sp"
+        tools:ignore="DuplicateIds" />
+
+
+    <SeekBar
+        android:id="@+id/focus_seekbar_near"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="40dp"
+        android:layout_marginBottom="60dp"
+        android:max="400"
+        android:maxHeight="16dip"
+        android:minHeight="16dip" />
+
+    <TextView
+        android:id="@+id/focusLabel_2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="60dp"
+        android:text="Focus far (mm)"
+        android:textColor="#FFFF00"
+        android:textSize="20sp" />
+
+    <SeekBar
+        android:id="@+id/focus_seekbar_far"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="90dp"
+        android:max="400"
+        android:maxHeight="4dip"
+        android:minHeight="4dip" />
+
+    <TextView
+        android:id="@+id/focussteps"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="110dp"
+        android:text="Steps: "
+        android:textColor="#FFFF00"
+        android:textSize="20sp" />
+
+    <SeekBar
+        android:id="@+id/pictures_no"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="140dp"
+        android:max="400"
+        android:maxHeight="4dip"
+        android:minHeight="4dip" />
+
+    <TextView
+        android:id="@+id/exposure_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="160dp"
+        android:text="Exposure (ms) "
+        android:textColor="#FFFF00"
+        android:textSize="20sp" />
+
+    <SeekBar
+        android:id="@+id/exposure_bar"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="180dp"
+        android:max="100"
+        android:maxHeight="4dip"
+        android:minHeight="4dip" />
+
+    <TextView
+        android:id="@+id/zoom_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="200dp"
+        android:text="Zoom (preview only)"
+        android:textColor="#FFFF00"
+        android:textSize="20sp" />
+
+    <SeekBar
+        android:id="@+id/zoom_bar"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="220dp"
+        android:max="400"
+        android:maxHeight="4dip"
+        android:minHeight="4dip" />
+
+    <TextView
+        android:id="@+id/progress_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="240dp"
+        android:text=""
+        android:textColor="#FFFF00"
+        android:textSize="20sp" />
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentStart="true"
         android:layout_below="@id/texture"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentBottom="true"
+        android:id="@+id/frame_layout"
         android:background="#4285f4">
 
-        <TextView
-            android:id="@+id/focusLabel"
-            android:text="Focus"
-            android:textColor="#FFFF00"
-            android:textSize="20sp"
-            android:layout_alignParentLeft="true"
-            android:layout_marginBottom="60dp"
-            android:layout_above="@+id/exposureLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-        <TextView
-            android:id="@+id/focusVal"
-            android:text="0"
-            android:textColor="#FFFF00"
-            android:textSize="16sp"
-            android:layout_toRightOf="@+id/focusLabel"
-            android:layout_above="@+id/focusLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-        <SeekBar
-            android:id="@+id/focus_seekbar"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:layout_toRightOf="@+id/focusLabel"
-            android:layout_alignTop="@+id/focusLabel"
-            android:minHeight="2dip"
-            android:maxHeight="2dip"
-            android:max="100"/>
 
         <Button
             android:id="@+id/picture"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
+            android:layout_marginTop="170dp"
             android:text="@string/picture" />
 
         <ImageButton
             android:id="@+id/info"
-            android:contentDescription="@string/description_info"
             style="@android:style/Widget.Material.Light.Button.Borderless"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical|end"
+            android:contentDescription="@string/description_info"
             android:padding="20dp"
             android:src="@drawable/ic_action_info" />
 

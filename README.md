@@ -1,7 +1,2 @@
-
-Android Camera2Raw Sample
-=========================
-
-This repo has been migrated to [github.com/android/camera][1]. Please check that repo for future updates. Thank you!
-
-[1]: https://github.com/android/camera
+This is a yet in development Android App that does focus bracketing on Android phones. It has optimizations for macro work, and it saves DNG files in its own folder under /DCIM/
+From there you can take them and feed them to Helicon Focus, or convert them to JPG and use some other focus stacking programs.

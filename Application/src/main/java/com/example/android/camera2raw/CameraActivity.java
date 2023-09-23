@@ -18,6 +18,7 @@ package com.example.android.camera2raw;
 
 import android.app.Activity;
 import android.content.res.AssetManager;
+import android.hardware.camera2.CameraAccessException;
 import android.os.Bundle;
 import android.app.AlarmManager;
 import android.content.Intent;
@@ -27,6 +28,7 @@ import android.os.Handler;
 import android.provider.Settings;
 import android.content.Context;
 import android.util.Log;
+import android.view.WindowManager;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -42,6 +44,7 @@ public class CameraActivity extends Activity {
 
     public static Camera2RawFragment cameraraw = Camera2RawFragment.newInstance();
     //String path = Environment.getDataDirectory()+"/android-Camera2Raw/";
+
 
     private void copy_assets(Context context) {
         AssetManager assetManager = context.getAssets();
@@ -66,6 +69,7 @@ public class CameraActivity extends Activity {
         } catch (Exception e) {
             Log.e(TAG, "Error: "+ e.getMessage());
         }
+
     }
 
     @Override
@@ -73,7 +77,9 @@ public class CameraActivity extends Activity {
     {
         int i;
 
-        cameraraw.forced_focus_mm=90;
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        cameraraw.forced_focus_mm=60;
         //cameraraw.init_webserver();
 
         Context context = getApplicationContext();
@@ -82,19 +88,24 @@ public class CameraActivity extends Activity {
         Log.e(TAG, "Trying to get assets");
         copy_assets(context);
 
-        new Thread(new Runnable() {
-            public void run() {
-                cameraraw.init_webserver(cameraraw);            }
-        }).start();
+        File mediaStorageDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "macro_bracketing");
 
-        new Thread(new Runnable() {
-            public void run() { cameraraw.que_thread(cameraraw);            }
-        }).start();
+        Log.e(TAG, "Dir name is" + mediaStorageDir.getPath());
 
+        //if this "JCGCamera folder does not exist
+        if (!mediaStorageDir.exists()) {
+            Log.e(TAG, "Trying to create subdir...");
+            //if you cannot make this folder return
+            if (!mediaStorageDir.mkdirs()) {
+                Log.e(TAG, "Couldn't create dcim subdir...");
+            }
+        }
+
+/*
         new Thread(new Runnable() {
             public void run() { cameraraw.ftp_upload();            }
         }).start();
-
+*/
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera);
 
@@ -125,9 +136,11 @@ public class CameraActivity extends Activity {
         }
 
 
-        cameraraw.forced_exposure=300_000_000L;
+        cameraraw.forced_exposure=30_000_000L;
         cameraraw.forced_iso=80;
-        cameraraw.force_exposure=true;
+        cameraraw.force_exposure=1;
+
+
 /*
         final Handler handler = new Handler();
 

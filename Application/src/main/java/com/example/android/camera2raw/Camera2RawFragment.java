@@ -17,20 +17,21 @@
 package com.example.android.camera2raw;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.AlarmManager;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.DialogFragment;
 import android.app.Fragment;
-import android.app.PendingIntent;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.Point;
+import android.graphics.PorterDuff;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
@@ -44,7 +45,6 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.DngCreator;
 import android.hardware.camera2.TotalCaptureResult;
-import android.hardware.camera2.params.ColorSpaceTransform;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
@@ -60,7 +60,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.SystemClock;
-import android.support.annotation.RequiresApi;
 import android.support.v13.app.FragmentCompat;
 import android.support.v4.app.ActivityCompat;
 import android.util.Log;
@@ -72,8 +71,14 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
+import android.widget.SeekBar;
+import android.widget.TextView;
 import android.widget.Toast;
-import android.os.PowerManager;
+
 
 import  java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -115,17 +120,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * </li>
  * </ul>
  */
+//public class Camera2RawFragment extends Fragment implements View.OnClickListener, FragmentCompat.OnRequestPermissionsResultCallback, SeekBar.OnSeekBarChangeListener {
 public class Camera2RawFragment extends Fragment implements View.OnClickListener, FragmentCompat.OnRequestPermissionsResultCallback {
 
     static {
         System.loadLibrary("raw_processor");
     }
 
-    public static native byte add_dng(byte[] data, int pics_to_take);
-    public static native byte init_webserver(Camera2RawFragment cameraraw);
-    public static native byte que_thread(Camera2RawFragment cameraraw);
-    public static native byte rtc_alarm(Camera2RawFragment cameraraw);
-    public static native byte ftp_upload();
+    public static native byte ftp_upload(Runnable cameraraw);
 
     /**
      * Conversion from screen rotation to JPEG orientation.
@@ -137,14 +139,32 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
     private long auto_exposure_val;
     private int auto_iso_val;
 
-    public boolean force_exposure=false;
-    public int forced_iso;
-    public int forced_focus_mm;
-    public long forced_exposure;
+    private int focus_stack_in_progress=0;
+    private int focus_stack_cur_picture=0;
 
-    public static int pics_to_take=4;
+    private int frames_no=0;
+
+    private float focus_start_mm;
+    private float focus_end_mm;
+
+    public int force_exposure=0;
+    public int forced_iso=80;
+    public float forced_focus_mm;
+    public long forced_exposure=0;
+
+    public Float minFocusDist;
+
+    public static int pics_to_take=1;
     public static int is_jpg_preview=0;
     public static int flash_state=0;
+
+    public float max_crop_zoom;
+
+    public Rect sensor_size;
+
+    public String force_camera_id="";
+
+    //public SeekBar focus_seekbar;
 
     CameraManager manager;
 
@@ -156,10 +176,6 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             this.mContext = mContext;
         }
 
-    public void call_alarm() {
-        Log.e(TAG, "Calling rtc_alarm()");
-        rtc_alarm(this);
-    }
 
     public void turnOnScreen() {
         //already got a lock?
@@ -204,7 +220,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         return (int)(forced_exposure/1000000);
     }
 
-    public int get_focus()
+    public float get_focus()
     {
         return forced_focus_mm;
     }
@@ -230,20 +246,20 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         return flash_state;
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.M)
-    public void set_alarm(int delay)
-    {
-        Intent intent = new Intent(mContext, MyBroadcastReceiver.class);
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(mContext, 234324243, intent, 0);
-        AlarmManager alarmManager = (AlarmManager) mContext.getSystemService(mContext.ALARM_SERVICE);
-        //alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + (delay * 1000), pendingIntent);
-        alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + delay*1000, pendingIntent);
-    }
-
-    public void change_focus(int focus)
+    public void change_focus(float focus)
     {
         forced_focus_mm=focus;
+        change_livepreview();
         Log.e(TAG, "Changed forced_focus_mm to "+forced_focus_mm);
+    }
+
+    public void change_digital_zoom(int zoom_level)
+    {
+        int crop=zoom_level*2;
+        Rect zoom = new Rect(crop, crop, sensor_size.width() - crop*2, sensor_size.height() - crop*2);
+        mPreviewRequestBuilder.set(CaptureRequest.SCALER_CROP_REGION, zoom);
+        change_livepreview();
+
     }
 
     public void change_pics_no(int pics_no)
@@ -252,9 +268,10 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         Log.e(TAG, "Changed pics_no to "+pics_no);
     }
 
-    public void change_exposure(int new_exposure)
+    public void change_exposure(float new_exposure)
     {
-        forced_exposure=new_exposure*1000000;
+        forced_exposure= (long) (new_exposure*1000000);
+        change_livepreview();
         Log.e(TAG, "Changed exposure to "+new_exposure);
     }
 
@@ -267,6 +284,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
     public void change_livepreview()
     {
         setup_preview(mPreviewRequestBuilder);
+        Log.e(TAG, "Changed live preview, after setup_preview");
 
         try {
             mCaptureSession.stopRepeating();
@@ -582,7 +600,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                 switch (mState) {
                     case STATE_PREVIEW: {
                         // We have nothing to do when the camera preview is running normally.
-                        if(!force_exposure)
+                        if(force_exposure==0)
                         if (result instanceof TotalCaptureResult)
                         {
                             auto_exposure_val = result.get(CaptureResult.SENSOR_EXPOSURE_TIME).longValue();
@@ -594,6 +612,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                     case STATE_WAITING_FOR_3A_CONVERGENCE: {
                         boolean readyToCapture = true;
 
+                        Log.w(TAG, "STATE_WAITING_FOR_3A_CONVERGENCE reached");
+
                         if(forced_focus_mm==0)
                         if (!mNoAFRun) {
                             Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
@@ -603,6 +623,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
                             // If auto-focus has reached locked state, we are ready to capture
                             readyToCapture = (afState == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED || afState == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED);
+                            Log.w(TAG, "STATE_WAITING_FOR_3A_CONVERGENCE leaving");
                         }
 
 
@@ -623,7 +644,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
                         // If we haven't finished the pre-capture sequence but have hit our maximum
                         // wait timeout, too bad! Begin capture anyway.
-                        if(!force_exposure) {
+                        if(force_exposure==0) {
                             if (!readyToCapture && hitTimeoutLocked()) {
                                 Log.w(TAG, "Timed out waiting for pre-capture sequence to complete.");
                                 readyToCapture = true;
@@ -687,7 +708,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         @Override
         public void onCaptureStarted(CameraCaptureSession session, CaptureRequest request, long timestamp, long frameNumber) {
             String currentDateTime = generateTimestamp();
-            File rawFile = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "RAW_" + currentDateTime + ".dng");
+            File rawFile = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)+"/macro_bracketing/", "RAW_" + currentDateTime + ".dng");
 
             // Look up the ImageSaverBuilder for this request and update it with the file name
             // based on the capture start time.
@@ -769,10 +790,196 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         return new Camera2RawFragment();
     }
 
+    public void update_steps_text(int steps){
+        TextView name = (TextView) getActivity().findViewById(R.id.focussteps);
+        name.setText("Steps: " + steps);
+    }
+
+    public void update_near_focus_text(float min_focus){
+        TextView name = (TextView) getActivity().findViewById(R.id.focusLabel);
+        name.setText("Focus near (mm) " + min_focus);
+    }
+
+    public void update_far_focus_text(float min_focus){
+        TextView name = (TextView) getActivity().findViewById(R.id.focusLabel_2);
+        name.setText("Focus far (mm) " + min_focus);
+    }
+
+    public void update_exposure_text(float new_exposure){
+        TextView name = (TextView) getActivity().findViewById(R.id.exposure_label);
+        name.setText("Exposure (ms) " + new_exposure);
+    }
+
+    public void update_progress_text(final int cur_picture, final int enabled){
+        getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                TextView name = (TextView) getActivity().findViewById(R.id.progress_text);
+                if (enabled == 1) name.setText("Capturing  " + cur_picture + "/" + frames_no);
+                else
+                {
+                    name.setText("");
+                    Toast.makeText(getActivity(), "Stack finished!", Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+    }
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        return inflater.inflate(R.layout.fragment_camera2_basic, container, false);
+        View rootView = inflater.inflate(R.layout.fragment_camera2_basic, container, false);
+        //final SeekBar seekBar_near  = (SeekBar) rootView.findViewById(R.id.focus_seekbar_near);
+        final SeekBar seekBar_near  = (SeekBar) rootView.findViewById(R.id.focus_seekbar_near);
+        final SeekBar seekBar_far  = (SeekBar) rootView.findViewById(R.id.focus_seekbar_far);
+        final SeekBar seekBar_pictures_no  = (SeekBar) rootView.findViewById(R.id.pictures_no);
+        final SeekBar seekBar_exposure  = (SeekBar) rootView.findViewById(R.id.exposure_bar);
+        final SeekBar seekBar_zoom  = (SeekBar) rootView.findViewById(R.id.zoom_bar);
+
+
+        //seekBar.setProgress(50);
+
+        //seekBar_near.setOnSeekBarChangeListener(this);
+        seekBar_near.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int i, boolean fromUser) {
+                // Call the function to display the SeekBar value
+                focus_start_mm=(1000/minFocusDist)+i*(1000-(1000/minFocusDist))/400;
+                change_focus(focus_start_mm);
+                update_near_focus_text(focus_start_mm);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user starts touching the SeekBar.
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user stops touching the SeekBar.
+            }
+
+        });
+
+        seekBar_far.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int i, boolean fromUser) {
+                // Call the function to display the SeekBar value
+                focus_end_mm=(1000/minFocusDist)+i*(1000-(1000/minFocusDist))/400;
+                change_focus(focus_end_mm);
+                update_far_focus_text(focus_end_mm);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user starts touching the SeekBar.
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user stops touching the SeekBar.
+            }
+
+        });
+
+
+        seekBar_pictures_no.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int i, boolean fromUser) {
+                // Call the function to display the SeekBar value
+                frames_no=i;
+                update_steps_text(i);
+                Log.e(TAG, "Frames no: "+ i);
+
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user starts touching the SeekBar.
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user stops touching the SeekBar.
+            }
+
+        });
+
+        seekBar_exposure.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int i, boolean fromUser) {
+                // Call the function to display the SeekBar value
+                float new_exposure;
+
+                if(i<10)
+                    new_exposure=(i+1)*0.3f;
+                else if (i<30) new_exposure=10*0.3f+i-10;
+                else if (i<60) new_exposure=10*0.3f+20+(i-30)*3;
+                else if (i<80) new_exposure=10*0.3f+20+90+(i-60)*9;
+                else new_exposure=10*0.3f+20+90+180+(i-80)*40;
+
+
+
+                change_exposure(new_exposure);
+                //update_steps_text(i);
+                update_exposure_text(new_exposure);
+                //Log.e(TAG, "Exposure i: "+ i);
+
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user starts touching the SeekBar.
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user stops touching the SeekBar.
+            }
+
+        });
+
+        seekBar_zoom.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int i, boolean fromUser) {
+                // Call the function to display the SeekBar value
+                change_digital_zoom(i);
+                //Log.e(TAG, "Frames no: "+ i);
+
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user starts touching the SeekBar.
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user stops touching the SeekBar.
+            }
+
+        });
+
+        // Inflate the layout for this fragment
+        //return inflater.inflate(R.layout.fragment_camera2_basic, container, false);
+        return rootView;
+
     }
+/*
+    @Override
+    public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
+        Log.e(TAG, "Sa moara familia lui Abi..."+ i);
+    }
+
+    @Override
+    public void onStartTrackingTouch(SeekBar seekBar) {
+        Log.e(TAG, "Sa moara familia lui Abi...");
+    }
+
+    @Override
+    public void onStopTrackingTouch(SeekBar seekBar) {
+        Log.e(TAG, "Sa moara familia lui Abi...");
+    }
+*/
 
     @Override
     public void onViewCreated(final View view, Bundle savedInstanceState) {
@@ -794,6 +1001,82 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
         };
         */
+
+        Log.e(TAG, "Sa moara familia lui Abi, a fost chemat on view created...");
+
+        //place_camera_buttons();
+
+    }
+
+    public void do_focus_stack(float start_mm, float end_mm)
+    {
+        float step_mm=(end_mm-start_mm)/frames_no;
+        int i;
+        forced_focus_mm=start_mm;
+
+        //set_wakelock();
+
+        focus_stack_in_progress=1;
+
+        //while(forced_focus_mm<end_mm)
+        for(i=0;i<frames_no;i++)
+        {
+
+            //change_livepreview();
+            change_focus(forced_focus_mm);
+
+            update_progress_text(i,1);
+/*
+            try
+            {
+                Thread.sleep(200);
+            }
+            catch(InterruptedException ex)
+            {
+                Thread.currentThread().interrupt();
+            }
+*/
+            takePicture();
+
+            while(true)
+                if (mPendingUserCaptures > 0)
+                {
+                    Log.e(TAG, "Camera not ready, waiting..., pending captures is " + mPendingUserCaptures);
+                    try
+                    {
+                        Thread.sleep(100);
+                    }
+                    catch(InterruptedException ex)
+                    {
+                        Thread.currentThread().interrupt();
+                    }
+                    continue;
+                }
+                else break;
+            try
+            {
+                Thread.sleep(300);
+            }
+            catch(InterruptedException ex)
+            {
+                Thread.currentThread().interrupt();
+            }
+
+            forced_focus_mm+=step_mm;
+            //change_livepreview();
+        }
+
+        focus_stack_in_progress=0;
+        update_progress_text(i,0);
+        //clear_wakelock();
+/*
+        new Thread(new Runnable() {
+            public void run() {
+                ftp_upload(this);
+            }
+        }).start();
+*/
+        Log.e(TAG, "All done with this stack");
 
     }
 
@@ -826,11 +1109,36 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
     }
 
 
+    public void onStart() {
+
+        super.onStart();
+        Log.e(TAG, "On start called...");
+        //place_camera_buttons();
+    }
+
+    @Override
+    public void onViewStateRestored(Bundle savedInstanceState) {
+        super.onViewStateRestored(savedInstanceState);
+        Log.e(TAG, "On view state restored called...");
+
+        final RelativeLayout layout = (RelativeLayout) getActivity().findViewById(R.id.myRelativeLayout);
+
+        layout.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                int height = layout.getHeight();
+                place_camera_buttons(height);
+                layout.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+            }
+        });
+
+    }
+
     @Override
     public void onResume() {
-        Log.e(TAG, "On resume called...");
         super.onResume();
         //do_resume_stuff();
+        Log.e(TAG, "On resume called...");
 
         startBackgroundThread();
 
@@ -875,9 +1183,15 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.picture: {
-                takePicture();
+                //takePicture();
+                new Thread(new Runnable() {
+                    public void run() {
+                        do_focus_stack(focus_start_mm, focus_end_mm);
+                    }
+                }).start();
                 break;
             }
+
             case R.id.info: {
                 Activity activity = getActivity();
                 if (null != activity) {
@@ -889,8 +1203,20 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                 break;
             }
         }
-    }
 
+    }
+/*
+    @Override
+    public void onProgressChanged(View view) {
+        switch (view.getId()) {
+
+            case R.id.focus_seekbar: {
+                Log.e(TAG, "Sa moara familia lui Abi daca nu am dat click pe focus seekbar...");
+                break;
+            }
+        }
+    }
+*/
     /**
      * Sets up state related to camera that is needed before opening a {@link CameraDevice}.
      */
@@ -904,16 +1230,27 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         try {
             // Find a CameraDevice that supports RAW captures, and configure state.
             for (String cameraId : manager.getCameraIdList()) {
+                //cameraId="5";
+                if(!force_camera_id.isEmpty())cameraId=force_camera_id;
+
                 CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+
+                Log.e(TAG, "Camera is: " + cameraId);
 
                 // We only use a camera that supports RAW in this sample.
                 if (!contains(characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES), CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW)) {
                     continue;
                 }
 
+                Log.e(TAG, "Camera characteristics: " + characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES));
+
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
 
                 Size largestRaw = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.RAW_SENSOR)), new CompareSizesByArea());
+
+                sensor_size = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+                max_crop_zoom = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+                Log.e(TAG, "Max crop zoom: " + max_crop_zoom);
 
                 synchronized (mCameraStateLock) {
                     // Set up ImageReaders for JPEG and RAW outputs.  Place these in a reference
@@ -939,6 +1276,84 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                 show(getFragmentManager(), "dialog");
         return false;
     }
+
+
+    @SuppressLint("ResourceType")
+    public void place_camera_buttons(int height) {
+        Activity activity = getActivity();
+        final int layout_height;
+
+        manager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
+
+        final RelativeLayout layout = (RelativeLayout) getActivity().findViewById(R.id.myRelativeLayout);
+
+
+
+        //layout.invalidate();
+        //layout.requestLayout();
+        //layout.measure(20000,20000);
+        Log.e(TAG, "Place buttons was called ");
+
+        float x=0;
+        int i=0;
+
+        try {
+            for (String cameraId : manager.getCameraIdList()) {
+
+                CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+
+                Log.e(TAG, "Camera is: " + cameraId);
+
+                CameraCharacteristics cameraCharacteristics = manager.getCameraCharacteristics(cameraId);
+                //only use backfacing cameras that support RAW
+                if(cameraCharacteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK)
+                if (contains(characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES), CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW)) {
+                    Log.e(TAG, "Has RAW");
+
+                    //View rootView = inflater.inflate(R.layout.fragment_camera2_basic, container, false);
+
+                    final Button myButton = new Button(mContext);
+                    myButton.setText("" + cameraId);
+                    //myButton.setId(44);
+                    myButton.setX(i * 160);
+                    myButton.setY(height - 100);
+                    myButton.setMinHeight(0);
+                    myButton.setPadding(5, 5, 5, 5);
+                    myButton.setLayoutParams(new LinearLayout.LayoutParams(140, 100));
+                    if (characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) > 0)
+                        myButton.getBackground().setColorFilter(Color.GREEN, PorterDuff.Mode.MULTIPLY);
+
+                    Log.e(TAG, "Height is " + layout.getHeight());
+
+
+                    //myButton.setWidth(100);
+                    //myButton.getLayoutParams().width=100;
+                    i++;
+                    myButton.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            change_camera(myButton.getText().toString());
+                        }
+                    });
+
+                    layout.addView(myButton);
+                    Log.e(TAG, "Button " + myButton.getText().toString() + "was added");
+
+
+                }
+
+                Log.e(TAG, "Min focus distance: " + characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE));
+            }
+
+        }
+        catch (CameraAccessException e) {
+        e.printStackTrace();
+        }
+
+        //getFragmentManager().beginTransaction().detach(this).attach(this).commit();
+    }
+
+
 
     /**
      * Opens the camera specified by {@link #mCameraId}.
@@ -1068,6 +1483,22 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         }
     }
 
+    private void change_camera(String camera_id) {
+
+        if(focus_stack_in_progress==1) {
+            Toast.makeText(getActivity(), "Can't change camera during focus bracketing...", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        force_camera_id=camera_id;
+        Log.e(TAG, "Before closeCamera()");
+        closeCamera();
+        Log.e(TAG, "Before openCamera()");
+        openCamera();
+        Log.e(TAG, "After openCamera()");
+    }
+
+
     /**
      * Starts a background thread and its {@link Handler}.
      */
@@ -1164,11 +1595,12 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         //else
         //builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF);
 
-        Float minFocusDist = mCharacteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
+        minFocusDist = mCharacteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
 
         // If MINIMUM_FOCUS_DISTANCE is 0, lens is fixed-focus and we need to skip the AF run.
         if(forced_focus_mm==0) {
             mNoAFRun = (minFocusDist == null || minFocusDist == 0);
+
 
             if (!mNoAFRun) {
                 // If there is a "continuous picture" mode available, use it, otherwise default to AUTO.
@@ -1178,6 +1610,9 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                     builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
             }
         }
+
+        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF);
+
         // If there is an auto-magical flash control mode available, use it, otherwise default to
         // the "on" mode, which is guaranteed to always be available.
         /*
@@ -1195,7 +1630,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         int target_iso;
         Long exp=0L;
 
-    if(force_exposure==false)
+    if(force_exposure==0)
         {
 
             if (auto_iso_val <= 200)
@@ -1219,6 +1654,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                     target_iso *= 2;
                 } else
                     break;
+
+            Log.e(TAG, "Auto iso val: " + auto_iso_val + " target iso: " + target_iso + " auto exposure val: " + auto_exposure_val + " new exp: " + exp);
         }
     else
         {
@@ -1226,17 +1663,20 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             exp=forced_exposure;
         }
 
+    //use the focus from preview
+
         if(forced_focus_mm>0)
         {
             float focus_diopters=1000.0f/forced_focus_mm;
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF);
             //builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, focus_diopters);
-            mPreviewRequestBuilder.set(CaptureRequest.LENS_FOCUS_DISTANCE,focus_diopters);//We set the focus in PREVIEW not capture
+            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE,focus_diopters);
             Log.e(TAG, "Focus distance (in capture) forced at " + focus_diopters);
         }
 
         builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exp);
         builder.set(CaptureRequest.SENSOR_SENSITIVITY, target_iso);
+        //builder.set(CaptureRequest.CONTROL_ZOOM_RATIO , target_iso);
 
         //builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, 1_000_000_000L);
         //builder.set(CaptureRequest.SENSOR_SENSITIVITY, 50);
@@ -1269,7 +1709,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         //builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF);
 
 
-        Float minFocusDist = mCharacteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
+        minFocusDist = mCharacteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
 /*
         // If MINIMUM_FOCUS_DISTANCE is 0, lens is fixed-focus and we need to skip the AF run.
         mNoAFRun = (minFocusDist == null || minFocusDist == 0);
@@ -1294,7 +1734,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             builder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF);
 
 
-        if(force_exposure==true)
+        if(force_exposure==1)
         {
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF);
             builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, forced_exposure);
@@ -1315,6 +1755,9 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         if (contains(mCharacteristics.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES), CaptureRequest.CONTROL_AWB_MODE_AUTO))
             // Allow AWB to run auto-magically if this device supports this
             builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO);
+
+        //Rect zoom = new Rect(300, 300, sensor_size.width() - 300*2, sensor_size.height() - 300*2);
+        //builder.set(CaptureRequest.SCALER_CROP_REGION, zoom);
 
     }
 
@@ -1461,8 +1904,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             // do this, return immediately.
 
             if (mState != STATE_PREVIEW ) {
-                Log.e(TAG, "Request to take pic, not preview...");
-                return 0;
+                Log.e(TAG, "Request to take pic, not preview... State is " + mState);
+                //return 0;
             }
 
             try {
@@ -1681,49 +2124,6 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             boolean success = false;
             int format = mImage.getFormat();
             switch (format) {
-                /*
-                case ImageFormat.JPEG: {
-                    if(is_jpg_preview==0)
-                    {
-                        //Log.e(TAG, "In jpg, is jpg preview " + is_jpg_preview);
-                        mImage.close();
-                        break;
-                    }
-                    ByteBuffer buffer = mImage.getPlanes()[0].getBuffer();
-                    byte[] bytes = new byte[buffer.remaining()];
-                    buffer.get(bytes);
-
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-
-                    try {
-                        baos.write(bytes);
-                        add_jpg(baos.toByteArray());
-                        success = true;
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    } finally {
-                        mImage.close();
-                    }
-                    break;
-                }
-
-                case ImageFormat.JPEG: {
-                    ByteBuffer buffer = mImage.getPlanes()[0].getBuffer();
-                    byte[] bytes = new byte[buffer.remaining()];
-                    buffer.get(bytes);
-                    FileOutputStream output = null;
-                    try {
-                        output = new FileOutputStream(mFile);
-                        output.write(bytes);
-                        success = true;
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    } finally {
-                        mImage.close();
-                        closeOutput(output);
-                    }
-                    break;
-                }
 
                 case ImageFormat.RAW_SENSOR: {
                     DngCreator dngCreator = new DngCreator(mCharacteristics, mCaptureResult);
@@ -1740,34 +2140,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                     }
                     break;
                 }
-*/
+
 /*
-                case ImageFormat.JPEG: {
-                    Size sensor_size=mCharacteristics.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE);
-                    int bayer=mCharacteristics.get(CameraCharacteristics.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT);
-                    int wb_array=mCharacteristics.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1);
-                    ColorSpaceTransform color_matrix = mCharacteristics.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1);
-
-                    //scolor_matrix.
-
-
-                    Log.e(TAG, "!!!!Before dng creator!!!!!!!");
-                    DngCreator dngCreator = new DngCreator(mCharacteristics, mCaptureResult);
-                    try {
-                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                        dngCreator.writeImage(baos, mImage);
-                        add_dng(baos.toByteArray(),pics_to_take);
-                        baos.close();
-
-                        success = true;
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    } finally {
-                        mImage.close();
-                    }
-                    break;
-                }
-*/
                 case ImageFormat.RAW_SENSOR: {
                     if(is_jpg_preview==1)
                     {
@@ -1798,7 +2172,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                     }
                     break;
                 }
-
+*/
 /*
                 case ImageFormat.RAW_SENSOR: {
                     int w = mImage.getWidth();
