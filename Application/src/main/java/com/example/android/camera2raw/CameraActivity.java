@@ -16,6 +16,13 @@
 
 package com.example.android.camera2raw;
 
+import static android.view.View.SYSTEM_UI_FLAG_FULLSCREEN;
+import static android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+import static android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+
 import android.app.Activity;
 import android.content.res.AssetManager;
 import android.hardware.camera2.CameraAccessException;
@@ -28,6 +35,7 @@ import android.os.Handler;
 import android.provider.Settings;
 import android.content.Context;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.WindowManager;
 
 import java.io.File;
@@ -73,11 +81,22 @@ public class CameraActivity extends Activity {
     }
 
     @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        Log.e(TAG, "Got key in onKeyDown : "+ keyCode);
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+            cameraraw.myonKeyDown(keyCode, event);
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState)
     {
         int i;
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        //getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        getWindow().getDecorView().setSystemUiVisibility(SYSTEM_UI_FLAG_IMMERSIVE_STICKY | SYSTEM_UI_FLAG_FULLSCREEN | SYSTEM_UI_FLAG_HIDE_NAVIGATION | SYSTEM_UI_FLAG_LAYOUT_STABLE | SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
 
         cameraraw.forced_focus_mm=60;
         //cameraraw.init_webserver();

@@ -30,103 +30,10 @@
         android:layout_marginTop="0dp" />
 
     <TextView
-        android:id="@+id/focusLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:text="Focus near (mm)"
-        android:textColor="#FFFF00"
-        android:textSize="20sp"
-        tools:ignore="DuplicateIds" />
-
-
-    <SeekBar
-        android:id="@+id/focus_seekbar_near"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="40dp"
-        android:layout_marginBottom="60dp"
-        android:max="400"
-        android:maxHeight="16dip"
-        android:minHeight="16dip" />
-
-    <TextView
-        android:id="@+id/focusLabel_2"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="60dp"
-        android:text="Focus far (mm)"
-        android:textColor="#FFFF00"
-        android:textSize="20sp" />
-
-    <SeekBar
-        android:id="@+id/focus_seekbar_far"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="90dp"
-        android:max="400"
-        android:maxHeight="4dip"
-        android:minHeight="4dip" />
-
-    <TextView
-        android:id="@+id/focussteps"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="110dp"
-        android:text="Steps: "
-        android:textColor="#FFFF00"
-        android:textSize="20sp" />
-
-    <SeekBar
-        android:id="@+id/pictures_no"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="140dp"
-        android:max="400"
-        android:maxHeight="4dip"
-        android:minHeight="4dip" />
-
-    <TextView
-        android:id="@+id/exposure_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="160dp"
-        android:text="Exposure (ms) "
-        android:textColor="#FFFF00"
-        android:textSize="20sp" />
-
-    <SeekBar
-        android:id="@+id/exposure_bar"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="180dp"
-        android:max="100"
-        android:maxHeight="4dip"
-        android:minHeight="4dip" />
-
-    <TextView
-        android:id="@+id/zoom_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="200dp"
-        android:text="Zoom (preview only)"
-        android:textColor="#FFFF00"
-        android:textSize="20sp" />
-
-    <SeekBar
-        android:id="@+id/zoom_bar"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="220dp"
-        android:max="400"
-        android:maxHeight="4dip"
-        android:minHeight="4dip" />
-
-    <TextView
         android:id="@+id/progress_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="240dp"
+        android:layout_marginBottom="20dp"
         android:text=""
         android:textColor="#FFFF00"
         android:textSize="20sp" />
@@ -140,20 +47,113 @@
         android:id="@+id/frame_layout"
         android:background="#4285f4">
 
+        <TextView
+            android:id="@+id/focusLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="0dp"
+            android:text="Focus near (mm)"
+            android:textColor="#FFFF00"
+            android:textSize="17sp"
+            tools:ignore="DuplicateIds" />
+
+
+        <SeekBar
+            android:id="@+id/focus_seekbar_near"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="60dp"
+            android:max="400"
+            android:maxHeight="16dip"
+            android:minHeight="16dip" />
+
+        <TextView
+            android:id="@+id/focusLabel_2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="30dp"
+            android:text="Focus far (mm)"
+            android:textColor="#FFFF00"
+            android:textSize="17sp" />
+
+        <SeekBar
+            android:id="@+id/focus_seekbar_far"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="50dp"
+            android:max="400"
+            android:maxHeight="4dip"
+            android:minHeight="4dip" />
+
+        <TextView
+            android:id="@+id/focussteps"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="60dp"
+            android:text="Steps: "
+            android:textColor="#FFFF00"
+            android:textSize="17sp" />
+
+        <SeekBar
+            android:id="@+id/pictures_no"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="80dp"
+            android:max="400"
+            android:maxHeight="4dip"
+            android:minHeight="4dip" />
+
+        <TextView
+            android:id="@+id/exposure_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="90dp"
+            android:text="Exposure (ms) "
+            android:textColor="#FFFF00"
+            android:textSize="17sp" />
+
+        <SeekBar
+            android:id="@+id/exposure_bar"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="110dp"
+            android:max="100"
+            android:maxHeight="4dip"
+            android:minHeight="4dip" />
+
+        <TextView
+            android:id="@+id/zoom_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="120dp"
+            android:text="Zoom (preview only)"
+            android:textColor="#FFFF00"
+            android:textSize="20sp" />
+
+        <SeekBar
+            android:id="@+id/zoom_bar"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="140dp"
+            android:max="400"
+            android:maxHeight="4dip"
+            android:minHeight="4dip" />
 
         <Button
             android:id="@+id/picture"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="170dp"
-            android:text="@string/picture" />
+            android:layout_marginTop="180dp"
+            android:text="BEGIN" />
 
         <ImageButton
             android:id="@+id/info"
             style="@android:style/Widget.Material.Light.Button.Borderless"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical|end"
+            android:layout_marginTop="170dp"
+            android:layout_marginLeft="340dp"
             android:contentDescription="@string/description_info"
             android:padding="20dp"
             android:src="@drawable/ic_action_info" />

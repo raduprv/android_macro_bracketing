@@ -51,7 +51,6 @@ import android.media.ImageReader;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -65,6 +64,7 @@ import android.support.v4.app.ActivityCompat;
 import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.OrientationEventListener;
 import android.view.Surface;
@@ -80,12 +80,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 
-import  java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -139,13 +137,15 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
     private long auto_exposure_val;
     private int auto_iso_val;
 
+    private int lowest_iso;
+
     private int focus_stack_in_progress=0;
     private int focus_stack_cur_picture=0;
 
     private int frames_no=0;
 
-    private float focus_start_mm;
-    private float focus_end_mm;
+    public float focus_start_mm;
+    public float focus_end_mm;
 
     public int force_exposure=0;
     public int forced_iso=80;
@@ -177,26 +177,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         }
 
 
-    public void turnOnScreen() {
-        //already got a lock?
-        if(screenLock!=null)return;
 
-        screenLock = ((PowerManager) mContext.getSystemService(mContext.POWER_SERVICE)).newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "pula:screen on");
-        screenLock.acquire(2000 * 1000L );
-
-        //Intent restart_intent = new Intent(mContext, CameraActivity.class);
-        //restart_intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        //restart_intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        //mContext.startActivity(restart_intent);
-    }
-
-    public void turnoffScreen()
-    {
-        if(screenLock!=null) {
-            screenLock.release();
-            screenLock=null;
-        }
-    }
 
     public void set_wakelock() {
         //already got a lock?
@@ -964,22 +945,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         return rootView;
 
     }
-/*
-    @Override
-    public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
-        Log.e(TAG, "Sa moara familia lui Abi..."+ i);
-    }
 
-    @Override
-    public void onStartTrackingTouch(SeekBar seekBar) {
-        Log.e(TAG, "Sa moara familia lui Abi...");
-    }
-
-    @Override
-    public void onStopTrackingTouch(SeekBar seekBar) {
-        Log.e(TAG, "Sa moara familia lui Abi...");
-    }
-*/
 
     @Override
     public void onViewCreated(final View view, Bundle savedInstanceState) {
@@ -1002,9 +968,6 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         };
         */
 
-        Log.e(TAG, "Sa moara familia lui Abi, a fost chemat on view created...");
-
-        //place_camera_buttons();
 
     }
 
@@ -1015,6 +978,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         forced_focus_mm=start_mm;
 
         //set_wakelock();
+
+        if(focus_stack_in_progress==1)return;
 
         focus_stack_in_progress=1;
 
@@ -1080,6 +1045,18 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
     }
 
+    public void myonKeyDown(int keyCode, KeyEvent event) {
+
+        Log.e(TAG, "Got key in myonKeyDown : "+ keyCode);
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+            new Thread(new Runnable() {
+                public void run() {
+                    do_focus_stack(focus_start_mm, focus_end_mm);
+                }
+            }).start();
+        }
+    }
+
     public void do_resume_stuff()
     {
             new Handler().postDelayed(new Runnable() {
@@ -1113,7 +1090,6 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
         super.onStart();
         Log.e(TAG, "On start called...");
-        //place_camera_buttons();
     }
 
     @Override
@@ -1196,7 +1172,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                 Activity activity = getActivity();
                 if (null != activity) {
                     new AlertDialog.Builder(activity)
-                            .setMessage(R.string.intro_message)
+                            .setMessage("Camera info:\nISO: " + lowest_iso + "\nResolution: " + sensor_size.width() + "x" + sensor_size.height())
                             .setPositiveButton(android.R.string.ok, null)
                             .show();
                 }
@@ -1205,18 +1181,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         }
 
     }
-/*
-    @Override
-    public void onProgressChanged(View view) {
-        switch (view.getId()) {
 
-            case R.id.focus_seekbar: {
-                Log.e(TAG, "Sa moara familia lui Abi daca nu am dat click pe focus seekbar...");
-                break;
-            }
-        }
-    }
-*/
     /**
      * Sets up state related to camera that is needed before opening a {@link CameraDevice}.
      */
@@ -1236,6 +1201,11 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                 CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
 
                 Log.e(TAG, "Camera is: " + cameraId);
+                //Log.e(TAG, "Camera iso modes: " + characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE));
+
+                lowest_iso=characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE).getLower();
+                Log.e(TAG, "Camera lowest iso: " + lowest_iso);
+                forced_iso=lowest_iso;
 
                 // We only use a camera that supports RAW in this sample.
                 if (!contains(characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES), CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW)) {
@@ -1278,6 +1248,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
     }
 
 
+
+
     @SuppressLint("ResourceType")
     public void place_camera_buttons(int height) {
         Activity activity = getActivity();
@@ -1292,7 +1264,9 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         //layout.invalidate();
         //layout.requestLayout();
         //layout.measure(20000,20000);
-        Log.e(TAG, "Place buttons was called ");
+
+            Log.e(TAG, "Place buttons was called");
+
 
         float x=0;
         int i=0;
@@ -1941,6 +1915,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
         return 1;
     }
+
 
     /**
      * Send a capture request to the camera device that initiates a capture targeting the JPEG and
