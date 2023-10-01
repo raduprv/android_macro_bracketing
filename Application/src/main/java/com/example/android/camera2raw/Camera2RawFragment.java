@@ -16,6 +16,9 @@
 
 package com.example.android.camera2raw;
 
+import static android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL;
+import static android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -72,7 +75,10 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
@@ -139,17 +145,26 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
     private int lowest_iso;
 
+    private int burst_mode=1;
+
+    private int burst_pics_no=15;
+    private int burst_cur_pic;
+
     private int focus_stack_in_progress=0;
     private int focus_stack_cur_picture=0;
 
     private int frames_no=0;
 
-    public float focus_start_mm;
+    public float focus_start_mm=0.f;
     public float focus_end_mm;
+
+    public float step_mm;
 
     public int force_exposure=0;
     public int forced_iso=80;
     public float forced_focus_mm;
+
+    public float cur_focus_mm;
     public long forced_exposure=0;
 
     public Float minFocusDist;
@@ -176,7 +191,15 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             this.mContext = mContext;
         }
 
+    private void setScreenBrightnessTo(float brightness) {
+        WindowManager.LayoutParams lp = getActivity().getWindow().getAttributes();
+        if (lp.screenBrightness == brightness) {
+            return;
+        }
 
+        lp.screenBrightness = brightness;
+        getActivity().getWindow().setAttributes(lp);
+    }
 
 
     public void set_wakelock() {
@@ -259,7 +282,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
     public void change_iso(int new_iso)
     {
         forced_iso=new_iso;
-        Log.e(TAG, "Changed exposure to "+new_iso);
+        change_livepreview();
+        Log.e(TAG, "Changed iso to "+new_iso);
     }
 
     public void change_livepreview()
@@ -277,8 +301,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
      catch (CameraAccessException | IllegalStateException e)
      {
         e.printStackTrace();
-        return;
-    }
+     }
 
     }
 
@@ -595,19 +618,6 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
                         Log.w(TAG, "STATE_WAITING_FOR_3A_CONVERGENCE reached");
 
-                        if(forced_focus_mm==0)
-                        if (!mNoAFRun) {
-                            Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
-                            if (afState == null) {
-                                break;
-                            }
-
-                            // If auto-focus has reached locked state, we are ready to capture
-                            readyToCapture = (afState == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED || afState == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED);
-                            Log.w(TAG, "STATE_WAITING_FOR_3A_CONVERGENCE leaving");
-                        }
-
-
                         // If we are running on an non-legacy device, we should also wait until
                         // auto-exposure and auto-white-balance have converged as well before
                         // taking a picture.
@@ -625,17 +635,24 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
                         // If we haven't finished the pre-capture sequence but have hit our maximum
                         // wait timeout, too bad! Begin capture anyway.
-                        if(force_exposure==0) {
-                            if (!readyToCapture && hitTimeoutLocked()) {
-                                Log.w(TAG, "Timed out waiting for pre-capture sequence to complete.");
-                                readyToCapture = true;
-                            }
-                        }
-                        else readyToCapture = true;
+
+                        readyToCapture = true;
+
+                        int i=0;
 
                         if (readyToCapture && mPendingUserCaptures > 0) {
-                            // Capture once for each user tap of the "Picture" button.
-                            while (mPendingUserCaptures > 0) {
+
+                            // stop preview, we start it again after the last pic is taken
+                            if(burst_mode==1)
+                                try {
+                                    mCaptureSession.stopRepeating();
+                                    } catch (CameraAccessException e) {
+                                    throw new RuntimeException(e);
+                                    }
+
+                            while (mPendingUserCaptures > 0)
+                            {
+                                Log.w(TAG, "Calling captureStillPictureLocked");
                                 captureStillPictureLocked();
                                 mPendingUserCaptures--;
                             }
@@ -709,6 +726,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             final ImageSaver.ImageSaverBuilder rawBuilder;
             StringBuilder sb = new StringBuilder();
 
+            Log.e(TAG, "On capture completed");
+
             // Look up the ImageSaverBuilder for this request and update it with the CaptureResult
             synchronized (mCameraStateLock) {
                 rawBuilder = mRawResultQueue.get(requestId);
@@ -736,6 +755,20 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                 handleCompletionLocked(requestId, rawBuilder, mRawResultQueue);
 
                 finishedCaptureLocked();
+
+                burst_cur_pic++;
+                if(burst_mode==1)
+                if(burst_cur_pic==burst_pics_no)
+                {
+                    try {
+                        mCaptureSession.setRepeatingRequest(mPreviewRequestBuilder.build(), mPreCaptureCallback, mBackgroundHandler);
+                    } catch (CameraAccessException e) {
+                        throw new RuntimeException(e);
+                    }
+
+                    update_progress_text(0,0);
+                    focus_stack_in_progress=0;
+                }
             }
 
             //showToast(sb.toString());
@@ -791,6 +824,11 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         name.setText("Exposure (ms) " + new_exposure);
     }
 
+    public void update_iso_text(int new_iso){
+        TextView name = (TextView) getActivity().findViewById(R.id.iso_label);
+        name.setText("ISO " + new_iso);
+    }
+
     public void update_progress_text(final int cur_picture, final int enabled){
         getActivity().runOnUiThread(new Runnable() {
             @Override
@@ -815,7 +853,47 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         final SeekBar seekBar_pictures_no  = (SeekBar) rootView.findViewById(R.id.pictures_no);
         final SeekBar seekBar_exposure  = (SeekBar) rootView.findViewById(R.id.exposure_bar);
         final SeekBar seekBar_zoom  = (SeekBar) rootView.findViewById(R.id.zoom_bar);
+        final SeekBar seekBar_iso  = (SeekBar) rootView.findViewById(R.id.iso_bar);
 
+        CheckBox checkboxburst=(CheckBox)rootView.findViewById(R.id.checkbox_burst);
+        CheckBox checkboxautoexp=(CheckBox)rootView.findViewById(R.id.checkbox_auto_exp);
+        CheckBox checkboxmaxbright=(CheckBox)rootView.findViewById(R.id.checkbox_max_bright);
+
+        checkboxburst.setChecked(true);
+
+        checkboxburst.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
+                if (isChecked)
+                    burst_mode=1;
+                else
+                    burst_mode=0;
+            }
+        });
+
+        checkboxautoexp.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
+                if (isChecked) {
+                    force_exposure = 0;
+                    change_livepreview();
+                }
+                else {
+                    force_exposure = 1;
+                    change_livepreview();
+                }
+            }
+        });
+
+        checkboxmaxbright.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
+                if (isChecked)
+                    setScreenBrightnessTo(BRIGHTNESS_OVERRIDE_FULL);
+                else
+                    setScreenBrightnessTo(BRIGHTNESS_OVERRIDE_NONE);
+            }
+        });
 
         //seekBar.setProgress(50);
 
@@ -940,6 +1018,28 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
         });
 
+        seekBar_iso.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int i, boolean fromUser) {
+                // Call the function to display the SeekBar value
+                change_iso(i+lowest_iso);
+                update_iso_text(i+lowest_iso);
+                //Log.e(TAG, "Frames no: "+ i);
+
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user starts touching the SeekBar.
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // This method is called when the user stops touching the SeekBar.
+            }
+
+        });
+
         // Inflate the layout for this fragment
         //return inflater.inflate(R.layout.fragment_camera2_basic, container, false);
         return rootView;
@@ -973,8 +1073,19 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
     public void do_focus_stack(float start_mm, float end_mm)
     {
-        float step_mm=(end_mm-start_mm)/frames_no;
         int i;
+
+
+        if(burst_mode==1)
+            step_mm=(focus_end_mm-focus_start_mm)/burst_pics_no;
+        else
+            step_mm=(end_mm-start_mm)/frames_no;
+
+        burst_cur_pic=0;
+
+        cur_focus_mm=start_mm;
+
+
         forced_focus_mm=start_mm;
 
         //set_wakelock();
@@ -982,6 +1093,13 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
         if(focus_stack_in_progress==1)return;
 
         focus_stack_in_progress=1;
+
+        if(burst_mode==1)
+        {
+            pics_to_take=burst_pics_no;
+            takePicture();
+            return;
+        }
 
         //while(forced_focus_mm<end_mm)
         for(i=0;i<frames_no;i++)
@@ -1228,7 +1346,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                     // using them are finished.
 
                     if (mRawImageReader == null || mRawImageReader.getAndRetain() == null) {
-                        mRawImageReader = new RefCountedAutoCloseable<>(ImageReader.newInstance(largestRaw.getWidth(), largestRaw.getHeight(), ImageFormat.RAW_SENSOR, /*maxImages*/ 11));
+                        mRawImageReader = new RefCountedAutoCloseable<>(ImageReader.newInstance(largestRaw.getWidth(), largestRaw.getHeight(), ImageFormat.RAW_SENSOR, /*maxImages*/ burst_pics_no));
                     }
                     mRawImageReader.get().setOnImageAvailableListener(mOnRawImageAvailableListener, mBackgroundHandler);
 
@@ -1563,39 +1681,15 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
      */
     private void setup3AControlsLocked(CaptureRequest.Builder builder) {
 
-        // Enable auto-magical 3A run by camera device
-        //if(force_exposure==false)
-        builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
-        //else
-        //builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF);
+
+        builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF);
 
         minFocusDist = mCharacteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
-
-        // If MINIMUM_FOCUS_DISTANCE is 0, lens is fixed-focus and we need to skip the AF run.
-        if(forced_focus_mm==0) {
-            mNoAFRun = (minFocusDist == null || minFocusDist == 0);
-
-
-            if (!mNoAFRun) {
-                // If there is a "continuous picture" mode available, use it, otherwise default to AUTO.
-                if (contains(mCharacteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES), CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE))
-                    builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                else
-                    builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
-            }
-        }
+        if(focus_start_mm==0)focus_start_mm=(1000/minFocusDist);
 
         builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF);
 
-        // If there is an auto-magical flash control mode available, use it, otherwise default to
-        // the "on" mode, which is guaranteed to always be available.
-        /*
-        if (contains(mCharacteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES), CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH))
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
-         else
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
-*/
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF);//pula
+        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF);
 
         if(flash_state==1)builder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH);
         //if(flash_state==1)builder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_SINGLE);
@@ -1606,30 +1700,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
     if(force_exposure==0)
         {
-
-            if (auto_iso_val <= 200)
-                target_iso = 50;
-            else if (auto_iso_val <= 400)
-                target_iso = 64;
-            else if (auto_iso_val <= 800)
-                target_iso = 80;
-            else if (auto_iso_val <= 1600)
-                target_iso = 100;
-            else if (auto_iso_val <= 3200)
-                target_iso = 200;
-            else
-                target_iso = 800;
-
-            exp = auto_exposure_val * auto_iso_val / target_iso;
-
-            while (true)
-                if (exp > 300_000_000L) {
-                    exp /= 2;
-                    target_iso *= 2;
-                } else
-                    break;
-
-            Log.e(TAG, "Auto iso val: " + auto_iso_val + " target iso: " + target_iso + " auto exposure val: " + auto_exposure_val + " new exp: " + exp);
+            target_iso = auto_iso_val;
+            exp = auto_exposure_val;
         }
     else
         {
@@ -1637,15 +1709,27 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             exp=forced_exposure;
         }
 
-    //use the focus from preview
+        Log.e(TAG, "target_iso: " + target_iso + " exp: " + exp);
 
-        if(forced_focus_mm>0)
+        //for burt mode, we do the focus somewhere else
+        if(burst_mode==0)
         {
-            float focus_diopters=1000.0f/forced_focus_mm;
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF);
-            //builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, focus_diopters);
-            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE,focus_diopters);
-            Log.e(TAG, "Focus distance (in capture) forced at " + focus_diopters);
+            if(forced_focus_mm>0)
+            {
+                float focus_diopters=1000.0f/forced_focus_mm;
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF);
+                //builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, focus_diopters);
+                builder.set(CaptureRequest.LENS_FOCUS_DISTANCE,focus_diopters);
+                Log.e(TAG, "Focus distance (in capture) forced at " + focus_diopters);
+            }
+        }
+        else
+        {
+            float focus_diopters=1000.0f/(cur_focus_mm+step_mm);
+            cur_focus_mm+=step_mm;
+            //captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF);
+            captureBuilder.set(CaptureRequest.LENS_FOCUS_DISTANCE,focus_diopters);
+            Log.w(TAG, "Focus diopters: " + focus_diopters + "forced_focus_mm: " + cur_focus_mm);
         }
 
         builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exp);
@@ -1684,6 +1768,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
 
 
         minFocusDist = mCharacteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
+        if(focus_start_mm==0)focus_start_mm=(1000/minFocusDist);
 /*
         // If MINIMUM_FOCUS_DISTANCE is 0, lens is fixed-focus and we need to skip the AF run.
         mNoAFRun = (minFocusDist == null || minFocusDist == 0);
@@ -1929,6 +2014,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             if (null == activity || null == mCameraDevice) {
                 return;
             }
+
             // This is the CaptureRequest.Builder that we use to take a picture.
             //final CaptureRequest.Builder captureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_MANUAL);
             captureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
@@ -1936,8 +2022,9 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             captureBuilder.addTarget(mRawImageReader.get().getSurface());
 
             //only do this for the first image in the burts
-            if(mPendingUserCaptures==pics_to_take)
-            setup3AControlsLocked(captureBuilder);
+            //if(mPendingUserCaptures==pics_to_take)
+                setup3AControlsLocked(captureBuilder);
+
 
             // Set orientation.
             //int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
@@ -1977,6 +2064,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
     private void finishedCaptureLocked() {
         try {
             // Reset the auto-focus trigger in case AF didn't run quickly enough.
+            Log.w(TAG, "Finished capture locked");
+
             if(forced_focus_mm==0)
             if (!mNoAFRun) {
                 mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL);
@@ -1984,6 +2073,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                 mCaptureSession.capture(mPreviewRequestBuilder.build(), mPreCaptureCallback, mBackgroundHandler);
 
                 mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE);
+
+
             }
         } catch (CameraAccessException e) {
             e.printStackTrace();
@@ -2112,6 +2203,7 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
                     } finally {
                         mImage.close();
                         closeOutput(output);
+
                     }
                     break;
                 }

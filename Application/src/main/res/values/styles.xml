@@ -15,4 +15,10 @@
 -->
 <resources>
     <style name="MaterialTheme" parent="android:Theme.Material.Light.NoActionBar.Fullscreen" />
+
+    <style name="MySeekBar" parent="Widget.AppCompat.SeekBar">
+        <item name="android:progressBackgroundTint">#FFFF00</item>
+        <item name="android:progressTint">#F0F000</item>
+        <item name="android:thumbTint">#FFFF00</item>
+    </style>
 </resources>

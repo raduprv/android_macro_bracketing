@@ -65,6 +65,7 @@
             android:layout_marginTop="20dp"
             android:layout_marginBottom="60dp"
             android:max="400"
+            android:theme="@style/MySeekBar"
             android:maxHeight="16dip"
             android:minHeight="16dip" />
 
@@ -83,6 +84,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="50dp"
             android:max="400"
+            android:theme="@style/MySeekBar"
             android:maxHeight="4dip"
             android:minHeight="4dip" />
 
@@ -101,6 +103,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="80dp"
             android:max="400"
+            android:theme="@style/MySeekBar"
             android:maxHeight="4dip"
             android:minHeight="4dip" />
 
@@ -119,6 +122,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="110dp"
             android:max="100"
+            android:theme="@style/MySeekBar"
             android:maxHeight="4dip"
             android:minHeight="4dip" />
 
@@ -133,10 +137,32 @@
 
         <SeekBar
             android:id="@+id/zoom_bar"
-            android:layout_width="fill_parent"
+            android:layout_width="200dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="140dp"
             android:max="400"
+            android:theme="@style/MySeekBar"
+            android:maxHeight="4dip"
+            android:minHeight="4dip" />
+
+        <TextView
+            android:id="@+id/iso_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="120dp"
+            android:layout_marginLeft="220dp"
+            android:text="ISO"
+            android:textColor="#FFFF00"
+            android:textSize="20sp" />
+
+        <SeekBar
+            android:id="@+id/iso_bar"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="140dp"
+            android:layout_marginLeft="220dp"
+            android:max="400"
+            android:theme="@style/MySeekBar"
             android:maxHeight="4dip"
             android:minHeight="4dip" />
 
@@ -146,6 +172,36 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="180dp"
             android:text="BEGIN" />
+
+        <CheckBox android:id="@+id/checkbox_burst"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="180dp"
+            android:layout_marginLeft="200dp"
+            android:textSize="20sp"
+            android:textColor="#FFFF00"
+            android:buttonTint="#FFFF00"
+            android:text="Burst mode" />
+
+        <CheckBox android:id="@+id/checkbox_auto_exp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="205dp"
+            android:layout_marginLeft="200dp"
+            android:textSize="20sp"
+            android:textColor="#FFFF00"
+            android:buttonTint="#FFFF00"
+            android:text="Auto exp/iso" />
+
+        <CheckBox android:id="@+id/checkbox_max_bright"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="230dp"
+            android:layout_marginLeft="200dp"
+            android:textSize="20sp"
+            android:textColor="#FFFF00"
+            android:buttonTint="#FFFF00"
+            android:text="Max brightness" />
 
         <ImageButton
             android:id="@+id/info"
