@@ -1023,7 +1023,8 @@ public class Camera2RawFragment extends Fragment implements View.OnClickListener
             public void onProgressChanged(SeekBar seekBar, int i, boolean fromUser) {
                 // Call the function to display the SeekBar value
                 change_iso(i+lowest_iso);
-                update_iso_text(i+lowest_iso);
+                //update_iso_text(i+lowest_iso);
+                update_iso_text(i+20);
                 //Log.e(TAG, "Frames no: "+ i);
 
             }
